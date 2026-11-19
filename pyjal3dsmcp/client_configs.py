@@ -1,15 +1,15 @@
-"""앱 설정 파일(Claude Desktop·Cursor·OpenCode)의 ``pyjal3dsmcp`` 항목을 추가·갱신·제거한다.
+"""Manage the PyJal3DSMCP entry in desktop JSON and Codex/ChatGPT TOML settings.
 
 파일만 다루고 외부 명령은 실행하지 않는다(외부 명령은 ``installer.py``에만 있다). 파일 위치는 호출하는 쪽이 정한다.
 
 규칙:
 
-- 기본은 **이미 있는 파일만** 고친다. 호출부가 허용한 Claude Desktop 설정은 없는 파일·부모 폴더를 만든다.
+- 기본은 **이미 있는 파일만** 고친다. 호출부가 허용한 데스크톱 설정은 없는 파일·부모 폴더를 만든다.
 - 자기 항목만 바꾸고 다른 서버 항목·최상위 키·키 순서는 보존한다. 이미 있는 자기 항목에서는 실행 명령 관련 키만 바꾸고
   ``env`` 등 사용자가 넣은 다른 키는 둔다.
 - 내용이 바뀔 때만 쓴다. 쓰기 직전에 ``<파일명>.pyjal3dsmcp.bak``이 없으면 원본 바이트를 백업한다. 쓰기는 같은 폴더의
   임시 파일에 쓴 뒤 교체한다. 신규 파일에는 원본 백업을 만들지 않는다. 원본에 UTF-8 BOM이 있었으면 BOM을 유지한다.
-- JSON으로 읽을 수 없거나(주석·중복 키 포함) 최상위·서버 묶음이 객체가 아니면 파일을 건드리지 않는다.
+- JSON 또는 TOML로 읽을 수 없거나 최상위·서버 묶음이 객체가 아니면 파일을 건드리지 않는다.
 """
 
 from __future__ import annotations
@@ -21,6 +21,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import tomlkit
+from tomlkit.exceptions import TOMLKitError
 
 SERVER_NAME = "pyjal3dsmcp"
 BACKUP_SUFFIX = ".pyjal3dsmcp.bak"
@@ -44,9 +47,12 @@ class AppConfig:
     path: Path
     opencode: bool = False
     create_missing: bool = False
+    codex: bool = False
 
     @property
     def servers_key(self) -> str:
+        if self.codex:
+            return "mcp_servers"
         return "mcp" if self.opencode else "mcpServers"
 
 
@@ -67,8 +73,14 @@ def entry_for(app: AppConfig, command: list[str]) -> dict[str, Any]:
 
 
 def manual_snippet(app: AppConfig, command: list[str]) -> str:
-    """사용자가 직접 넣을 내용(JSON 문자열)."""
-    return json.dumps({app.servers_key: {SERVER_NAME: entry_for(app, command)}}, indent=2, ensure_ascii=False)
+    """Return a registration snippet in the client's own format."""
+    return _serialize(app, {app.servers_key: {SERVER_NAME: entry_for(app, command)}})
+
+
+def _serialize(app: AppConfig, data: dict[str, Any]) -> str:
+    if app.codex:
+        return tomlkit.dumps(data)
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def backup_path(path: Path) -> Path:
@@ -92,18 +104,21 @@ def _load(app: AppConfig) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise ValueError(f"UTF-8이 아님: {exc}") from exc
-    data = json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    try:
+        data = tomlkit.parse(text) if app.codex else json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    except TOMLKitError as exc:
+        raise ValueError(str(exc)) from exc
     if not isinstance(data, dict):
         raise ValueError("최상위가 JSON 객체가 아님")
     servers = data.get(app.servers_key, {})
     if not isinstance(servers, dict):
-        raise ValueError(f'"{app.servers_key}"가 JSON 객체가 아님')
+        raise ValueError(f'"{app.servers_key}" must be a table/object')
     return raw, data, servers
 
 
 def _write(app: AppConfig, original: bytes | None, data: dict[str, Any]) -> None:
     """기존 원본만 처음 한 번 백업하고 임시 파일을 거쳐 교체한다."""
-    content = (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    content = _serialize(app, data).encode("utf-8")
     if original is not None and original.startswith(codecs.BOM_UTF8):
         content = codecs.BOM_UTF8 + content
     if original is None:
@@ -144,21 +159,20 @@ def register(app: AppConfig, command: list[str]) -> Outcome:
             return Outcome(UNREADABLE, str(exc))
 
     current = servers.get(SERVER_NAME)
+    if app.codex and isinstance(current, dict) and "url" in current:
+        return Outcome(FAILED, f"An HTTP server already uses the name {SERVER_NAME} in {app.path}.")
     desired = entry_for(app, command)
     if isinstance(current, dict):
-        updated = dict(current)
-        updated.update(desired)
-        if not app.opencode and "args" not in desired:
-            updated.pop("args", None)
+        stale_args = not app.opencode and "args" not in desired and "args" in current
+        if not stale_args and all(current.get(key) == value for key, value in desired.items()):
+            return Outcome(UNCHANGED)
+        current.update(desired)
+        if stale_args:
+            del current["args"]
     else:
-        updated = desired
-    if current == updated:
-        return Outcome(UNCHANGED)
-
-    servers = dict(servers)
-    servers[SERVER_NAME] = updated
-    data = dict(data)
-    data[app.servers_key] = servers
+        if app.servers_key not in data:
+            data[app.servers_key] = {}
+        data[app.servers_key][SERVER_NAME] = desired
     try:
         _write(app, original, data)
     except OSError as exc:
@@ -176,9 +190,11 @@ def unregister(app: AppConfig) -> Outcome:
         return Outcome(UNREADABLE, str(exc))
     if SERVER_NAME not in servers:
         return Outcome(ABSENT)
+    current = servers[SERVER_NAME]
+    if app.codex and isinstance(current, dict) and "url" in current:
+        return Outcome(ABSENT)  # A remote entry belongs to a different installation.
 
-    data = dict(data)
-    data[app.servers_key] = {name: value for name, value in servers.items() if name != SERVER_NAME}
+    del servers[SERVER_NAME]
     try:
         _write(app, original, data)
     except OSError as exc:

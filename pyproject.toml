@@ -19,6 +19,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "tomlkit>=0.13,<1",
     "3dsmax-mcp @ git+https://github.com/cl0nazepamm/3dsmax-mcp@82f555275c4d030e0125898526c9a93e19532a1e",
 ]
 
@@ -42,4 +43,4 @@ packages = ["pyjal3dsmcp", "pyjal_extensions"]
 "docs/pyjal/DLEL-AGENT-GUIDE.md" = "pyjal3dsmcp/docs/DLEL-AGENT-GUIDE.md"
 
 [tool.hatch.build.targets.sdist]
-only-include = ["pyjal3dsmcp", "pyjal_extensions", "docs/pyjal/DLEL-AGENT-GUIDE.md", "README.md", "LICENSE"]
+only-include = ["pyjal3dsmcp", "pyjal_extensions", "docs/pyjal/DLEL-AGENT-GUIDE.md", "README.md", "README.ko.md", "LICENSE"]

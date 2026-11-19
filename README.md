@@ -1,43 +1,71 @@
 # PyJal3DSMCP
 
-3ds Max를 AI 클라이언트에서 사용하는 MCP 서버입니다. [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp)에 DLEL(Dynamic Library Extension Layer) 도구 11개를 추가하여 로컬 Python 라이브러리를 검색하고, 선택한 3ds Max 인스턴스에서 실행합니다. 일반적인 장면 작업에는 기존 전용 도구를 먼저 사용합니다.
+[한국어 README](README.ko.md)
 
-## 설치
+Connect Claude Desktop, Codex, or ChatGPT Desktop to Autodesk 3ds Max on your Windows workstation. Ask your assistant to inspect a scene, find objects by name, or work with materials and modifiers. PyJal3DSMCP includes the tools from [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp) and adds 11 tools for discovering and running your own Python libraries inside Max.
 
-Windows, Python 3.12 이상, Git, [uv](https://docs.astral.sh/uv/)와 3ds Max가 필요합니다. PowerShell에서 저장소를 복제하고 설치합니다.
+## Ask an agent to install it
 
-```powershell
-git clone https://github.com/jalnaga/PyJal3DSMCP.git
-Set-Location PyJal3DSMCP
-uv run pyjal3dsmcp-install
-```
+Copy this into an agent that can run PowerShell on the PC where you use Max. Replace **Claude Desktop** with **Codex** or **ChatGPT Desktop** if that is the app you use.
 
-설치 전에 실행 중인 3ds Max와 MCP 서버를 사용하는 클라이언트를 종료하세요. 설치 후 3ds Max와 클라이언트를 다시 시작합니다.
+> Install https://github.com/jalnaga/PyJal3DSMCP for Claude Desktop on this Windows PC. Follow the README and register the server for that app. Let me save my scene if Max needs to close. After restart, verify the connection by reading a scene overview.
 
-설치기는 서버를 `uv tool install`로 고정 설치하고 사용자 설정, Max 애플리케이션 패키지, skill을 준비합니다. `PATH`에 있는 Claude Code·Codex·Gemini CLI와 Claude Desktop, 기존 설정 파일이 있는 Cursor·OpenCode에 `pyjal3dsmcp` 이름으로 등록합니다. Claude Desktop은 설정이 없으면 생성합니다. 기존 앱 설정은 최초 변경 시 `.pyjal3dsmcp.bak`으로 백업하며 `--no-apps`로 앱 설정 변경을 건너뛸 수 있습니다.
+You need Windows, **3ds Max 2023–2027**, and a desktop client with local MCP support. For ChatGPT Desktop, use a local Work session with **Settings → MCP servers**. The client launches the server locally over standard input/output (stdio). [OpenAI desktop MCP setup](https://learn.chatgpt.com/docs/extend/mcp)
 
-도구 프로필은 항상 `full`입니다. 사용자 설정을 처음 만들 때 `safe_mode = false`로 설정합니다. 기존 설정의 `safe_mode`는 유지됩니다. Python bridge를 쓰는 라이브러리 도구는 `safe_mode=false`가 필요하며 에이전트가 임의로 설정을 바꾸지 않습니다. 기존 `3dsmax-mcp` 등록은 자동 제거하지 않으므로 중복 서버가 보이면 설치기가 안내하는 제거 명령을 확인하세요.
+## Install on Windows
 
-## 업데이트와 제거
+1. Open PowerShell as the Windows user who runs Max and the client. Check `git --version` and `uv --version`. If either command is missing, install the corresponding package below and reopen PowerShell. uv can download Python 3.12 for this project. [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/)
 
-복제한 저장소 폴더에서 실행합니다.
+   ```powershell
+   winget install --id Git.Git -e
+   winget install --id astral-sh.uv -e
+   ```
 
-```powershell
-uv run pyjal3dsmcp-update
-uv run pyjal3dsmcp-uninstall --dry-run
-uv run pyjal3dsmcp-uninstall
-```
+2. Save your scene and close 3ds Max before installing the bridge for the first time. If the matching bridge is already installed, Max can stay open. For an update, close any clients using the previous server executable. Clone the repository into a folder you can keep for updates, or open the existing checkout.
 
-업데이트는 `git pull --ff-only` 후 새 코드로 다시 설치합니다. 로컬 변경 때문에 pull이 실패하면 변경을 정리하세요. `--no-pull`은 내려받기 없이 재설치합니다. 제거는 목록과 확인 절차를 거쳐 이 서버의 등록·설치물을 정리합니다.
+   ```powershell
+   git clone https://github.com/jalnaga/PyJal3DSMCP.git
+   Set-Location PyJal3DSMCP
+   ```
 
-## 라이브러리 사용
+3. Run the command for your app. The examples skip the optional agent skill so the install runs without a skill-selection prompt. Windows may ask you to approve writing the Autodesk application package.
 
-대상 3ds Max의 PID를 확인하고 `library_attach`를 호출합니다. `library_search` → `library_describe`로 정확한 API를 읽은 뒤 `library_execute`를 사용합니다. 개인 라이브러리는 사용자 요청에 따라 `library_register`로 등록하고 인스턴스별 활성화와 import·실행 승인을 받습니다.
+   | Client | PowerShell command |
+   | --- | --- |
+   | Claude Desktop | `uv run --python 3.12 pyjal3dsmcp-install --client claude-desktop --skip-skill` |
+   | Codex | `uv run --python 3.12 pyjal3dsmcp-install --client codex --skip-skill` |
+   | ChatGPT Desktop (local Work) | `uv run --python 3.12 pyjal3dsmcp-install --client chatgpt-desktop --skip-skill` |
 
-[에이전트 사용 가이드](docs/pyjal/DLEL-AGENT-GUIDE.md)는 MCP resource `resource://pyjal3dsmcp/agent-guide`로도 제공됩니다. 라이브러리 원본은 정적 분석하며 자동 reload는 하지 않습니다. 로드된 코드와 원본 revision이 다르면 해당 Max를 다시 시작해야 합니다.
+   To configure Claude and both OpenAI clients in one run, pass `--client claude-desktop --client codex`. Codex and ChatGPT Desktop share one entry, even on a PC without the Codex CLI. Omitting `--client` also enables discovery of Claude Code, Gemini CLI, Cursor and OpenCode.
 
-공유 프로필을 사용하는 환경에서는 `pyjal3dsmcp-team.toml`로 신뢰 루트와 라이브러리를 지정할 수 있습니다. 설치기를 이 파일이 있는 폴더에서 실행하면 로컬 설정에 프로필 위치를 기록합니다. `PYJAL_DLEL_TEAM_PROFILE` 환경 변수는 로컬 설정의 `team_profile`보다 우선합니다. 프로필 안 경로는 프로필 폴더 기준 상대 경로이며 그 폴더 밖으로 나갈 수 없습니다. 신뢰 루트의 라이브러리는 프로필 배포자의 import·실행 승인을 상속합니다. 신뢰하는 코드만 포함하세요.
+   The installer uses `uv tool install` and writes the absolute path to `pyjal3dsmcp.exe` into the client settings. Check that the command exits successfully. If it reports a locked executable, quit the app using the old server and retry from PowerShell.
 
-## 라이선스
+## Verify from your app
 
-[MIT License](LICENSE). 의존하는 3dsmax-mcp의 라이선스는 해당 프로젝트를 확인하세요.
+Start Max and open a new conversation after reloading the client. The server name is **`pyjal3dsmcp`**.
+
+| Client | Where to check |
+| --- | --- |
+| Claude Desktop | Fully quit and reopen Claude. Open **Settings → Developer → Edit Config** to see the registered command. The installer handles both classic and Microsoft Store config locations. [Claude Desktop MCP setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers) |
+| Codex | Open a new local session and type `/mcp`. If the CLI is installed, `codex mcp get pyjal3dsmcp` also shows the registered command. |
+| ChatGPT Desktop | Open **Settings → MCP servers**, enable the server if needed, select **Restart**, then type `/mcp` in a local Work conversation. [OpenAI desktop MCP setup](https://learn.chatgpt.com/docs/extend/mcp) |
+
+> Use PyJal3DSMCP to list running 3ds Max instances. If there is one, read its scene overview and tell me the object count. If there are several, ask which one I want. Leave the scene as it is.
+
+A successful `query_scene` call with `action="overview"` confirms the connection all the way to Max. If the server is listed but no Max instance appears, check the installer's output for your year's `mcp_bridge_YYYY.gup` and restart Max. If the server is missing, check that the app is using the config path printed by the installer. For Codex and ChatGPT this defaults to `%USERPROFILE%\.codex\config.toml` and follows `CODEX_HOME` when set.
+
+## Updates and removal
+
+Run these from the checkout. To update, use the same client flag as at install time, for example `uv run pyjal3dsmcp-update --client claude-desktop --skip-skill`. This pulls with `git pull --ff-only` and reinstalls. Add `--no-pull` to reinstall the current checkout.
+
+Preview removal with `uv run pyjal3dsmcp-uninstall --dry-run`. To proceed, save your scene, close Max and clients using the server, and run `uv run pyjal3dsmcp-uninstall`. This removes the Max bridge. Any clients using the upstream `3dsmax-mcp` server also depend on that bridge. Client config files get a `.pyjal3dsmcp.bak` backup on their first edit.
+
+## Using Python libraries inside Max
+
+For ordinary scene work, use the dedicated Max tools. For a custom library, select the intended Max PID, run `library_attach`, then use `library_search` and `library_describe` to inspect the API before `library_execute`. Register personal libraries with `library_register` and approve import and execution per instance. The server uses the full tool profile. The installer sets `safe_mode = false` in a new Max configuration to permit Python execution and respects an existing setting.
+
+Teams can put `pyjal3dsmcp-team.toml` in the installer's working directory to register shared libraries and trusted roots. `PYJAL_DLEL_TEAM_PROFILE` overrides that profile location. Libraries under a trusted root inherit import and execution approval. The [library agent guide (Korean)](docs/pyjal/DLEL-AGENT-GUIDE.md) is also available as the MCP resource `resource://pyjal3dsmcp/agent-guide`.
+
+## License
+
+[MIT License](LICENSE). The upstream dependency is distributed under its [own license](https://github.com/cl0nazepamm/3dsmax-mcp/blob/82f555275c4d030e0125898526c9a93e19532a1e/LICENSE).

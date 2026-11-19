@@ -10,9 +10,8 @@
    ``false``로 쓴다. 이미 있던 INI의 ``safe_mode``는 건드리지 않는다.
 2. Max 애플리케이션 패키지: ``deploy_application_package()``.
 3. skill: ``build_skills()``.
-4. 클라이언트 등록: ``PATH``에 있는 CLI ``claude``·``codex``·``gemini``에 이름 ``pyjal3dsmcp``로 등록한다.
-5. 앱 설정 파일: Claude Desktop 설정은 없으면 부모 폴더와 함께 만들고, Cursor·OpenCode는 기존 설정 파일에
-   ``pyjal3dsmcp`` 항목만 넣는다(``client_configs``, ``--no-apps``면 생성도 건너뜀).
+4. ``--client``로 지정한 데스크톱 앱에만 등록한다. 기본 자동 등록에는 Claude Code, Gemini, Cursor, OpenCode도 포함된다.
+5. Claude Desktop은 JSON, Codex와 ChatGPT Desktop은 공유 TOML에 등록한다. ``--no-apps``는 CLI 등록만 수행한다.
 6. 팀 프로필: 현재 작업 폴더(프로필 배포 폴더)에 ``pyjal3dsmcp-team.toml``이 있으면 그 절대 경로를 DLEL 로컬 설정
    (``%LOCALAPPDATA%\\PyJal3DSMCP\\dlel\\settings.json``)의 ``team_profile``에 기록한다. 없으면 기존 기록을 그대로 둔다.
    고정 설치 준비가 실패하면 다른 단계와 마찬가지로 기록하지 않는다.
@@ -37,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import tomllib
 from importlib import metadata
 from pathlib import Path
@@ -56,6 +56,7 @@ LEGACY_SERVER_NAME = "3dsmax-mcp"
 UPSTREAM_DISTRIBUTION = "3dsmax-mcp"
 SKILL_NAME = "3dsmax-mcp-dev"
 AGENTS = ("claude", "codex", "gemini")
+DESKTOP_CLIENTS = ("claude-desktop", "codex", "chatgpt-desktop")
 AGENT_COMMAND_TIMEOUT_SECONDS = 30
 # Max 애플리케이션 패키지로 지워도 되는 경로의 마지막 세 요소(Upstream APPLICATION_PACKAGE_DST)
 PACKAGE_PATH_TAIL = ("autodesk", "applicationplugins", "3dsmax-mcp")
@@ -105,7 +106,7 @@ def server_command() -> list[str]:
     """
     root = checkout_root()
     if root is not None:
-        return ["uv", "run", "--directory", str(root), SERVER_NAME]
+        return [shutil.which("uv") or "uv", "run", "--directory", str(root), SERVER_NAME]
     script = console_script_path()
     if script is not None:
         return [str(script)]
@@ -206,7 +207,8 @@ def pin_install(source: str) -> list[str] | None:
         return None
     print(f"  소스: {source}")
     try:
-        completed = _run([uv, "tool", "install", "--force", "--reinstall", source])
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        completed = _run([uv, "tool", "install", "--python", python_version, "--force", "--reinstall", source])
     except OSError as exc:
         print(f"  실패: uv를 실행하지 못했습니다 ({exc}). 아무것도 바꾸지 않았습니다.")
         return None
@@ -310,14 +312,14 @@ def _registered_env(agent: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in env.items()} if isinstance(env, dict) else {}
 
 
-def register_agents(command: list[str]) -> list[str]:
+def register_agents(command: list[str], candidates: tuple[str, ...] = AGENTS) -> list[str]:
     """``PATH``에 있는 클라이언트 CLI에 ``pyjal3dsmcp``를 등록한다. 찾은 CLI 이름을 돌려준다."""
     print("\n[4/4] MCP 클라이언트 등록 (CLI)")
-    agents = [agent for agent in AGENTS if shutil.which(agent)]
+    agents = [agent for agent in candidates if shutil.which(agent)]
     if not agents:
-        print(f"  PATH에서 클라이언트 CLI({', '.join(AGENTS)})를 찾지 못했습니다.")
+        print(f"  PATH에서 클라이언트 CLI({', '.join(candidates)})를 찾지 못했습니다.")
         print("  CLI를 설치한 뒤 아래 명령으로 직접 등록할 수 있습니다:")
-        for agent in AGENTS:
+        for agent in candidates:
             print(f"    {subprocess.list2cmdline(add_command(agent, command))}")
         return agents
 
@@ -358,14 +360,21 @@ def report_legacy_registrations() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def app_configs(installer: Any) -> list[client_configs.AppConfig]:
+def app_configs(installer: Any, clients: tuple[str, ...] = ()) -> list[client_configs.AppConfig]:
     """앱 설정 파일 위치(파일이 있는지는 보지 않는다). 위치 규칙은 Upstream 경로 도우미를 따른다."""
     apps = []
-    for path in installer.claude_desktop_config_paths():
-        store = any(part.lower() == "packages" for part in path.parts)
-        apps.append(client_configs.AppConfig(
-            "Claude Desktop (Microsoft Store)" if store else "Claude Desktop", path, create_missing=True,
-        ))
+    if not clients or "claude-desktop" in clients:
+        for path in installer.claude_desktop_config_paths():
+            store = any(part.lower() == "packages" for part in path.parts)
+            apps.append(client_configs.AppConfig(
+                "Claude Desktop (Microsoft Store)" if store else "Claude Desktop", path, create_missing=True,
+            ))
+    if not clients or {"codex", "chatgpt-desktop"}.intersection(clients):
+        base = os.environ.get("CODEX_HOME")
+        path = (Path(base) if base else Path.home() / ".codex") / "config.toml"
+        apps.append(client_configs.AppConfig("Codex / ChatGPT Desktop", path, create_missing=True, codex=True))
+    if clients:
+        return apps
     apps.append(client_configs.AppConfig("Cursor", Path.home() / ".cursor" / "mcp.json"))
     apps.append(client_configs.AppConfig("OpenCode", installer.resolve_opencode_config(Path.home()), opencode=True))
     return apps
@@ -377,10 +386,11 @@ def _print_manual_app_entry(app: client_configs.AppConfig, command: list[str]) -
         print(f"      {line}")
 
 
-def register_app_configs(installer: Any, command: list[str]) -> None:
-    """앱 설정에 등록하고 Claude Desktop의 없는 설정을 만든다. 실패해도 설치를 멈추지 않는다."""
-    print("\n[4/4] MCP 클라이언트 등록 (Claude Desktop 설정 자동 생성)")
-    for app in app_configs(installer):
+def register_app_configs(installer: Any, command: list[str], clients: tuple[str, ...] = ()) -> bool:
+    """Register the selected desktop clients and report configuration errors to the caller."""
+    print("\n[4/4] MCP desktop clients")
+    ok = True
+    for app in app_configs(installer, clients):
         outcome = client_configs.register(app, command)
         if outcome.status == client_configs.MISSING:
             continue
@@ -392,10 +402,11 @@ def register_app_configs(installer: Any, command: list[str]) -> None:
         elif outcome.status == client_configs.UNCHANGED:
             print(f"  이미 최신: {app.label} ({app.path})")
         else:
+            ok = False
             reason = "읽을 수 없어 바꾸지 않았습니다" if outcome.status == client_configs.UNREADABLE else "쓰지 못했습니다"
             print(f"  건너뜀: {app.label} - {reason} ({outcome.message})")
             _print_manual_app_entry(app, command)
-    print("  Cursor·OpenCode는 기존 설정 파일만 등록합니다. 설정이 생긴 뒤 설치기를 다시 실행하세요.")
+    return ok
 
 
 def print_manual_registration(command: list[str]) -> None:
@@ -484,13 +495,29 @@ def _add_install_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-skill", "--skip-skills", action="store_true", help="skill 빌드·설치 단계를 건너뜁니다."
     )
-    parser.add_argument("--no-apps", action="store_true", help="앱 설정 파일(Claude Desktop·Cursor·OpenCode)을 고치지 않습니다.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--no-apps", action="store_true", help="Use CLI registration only.")
+    group.add_argument("--client", choices=DESKTOP_CLIENTS, action="append", default=[],
+                       help="Register only this desktop client (repeat to select several).")
 
 
 def install(args: argparse.Namespace) -> int:
     """설치 절차. 고정 설치·``--editable`` 준비가 실패하면 아무것도 바꾸지 않고 2, 패키지 단계 실패는 1, 성공은 0."""
     installer = upstream.load_installer()
     print(f"PyJal3DSMCP 설치기 v{_version(SERVER_NAME)} (Upstream 3dsmax-mcp {_version(UPSTREAM_DISTRIBUTION)})")
+
+    running = installer.running_max_processes()
+    if running:
+        # An artist may be connecting another client to an already installed bridge.
+        # Only reuse the bundle if every file shipped for this release matches on disk.
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = Path(tmp)
+            _, missing = installer.stage_bundle(staged)
+            differences = installer.package_differences(staged, installer.APPLICATION_PACKAGE_DST)
+        if missing or differences or not installer.MS_SERVER.is_file():
+            print(f"Save your work and close 3ds Max ({', '.join(running)}) to install the bridge, then retry.")
+            return 1
+        print("The installed Max bridge matches this release. Reusing it while Max is open.")
 
     if args.editable:
         root = checkout_root()
@@ -514,31 +541,40 @@ def install(args: argparse.Namespace) -> int:
 
     deploy_user_config(installer)
     record_team_profile()
-    package_ok = bool(installer.deploy_application_package())
+    package_ok = bool(running) or installer.deploy_application_package()
     if args.skip_skill:
         print("\n[3/4] skill: 건너뜀 (--skip-skill)")
     else:
         installer.build_skills()
 
-    register_agents(command)
+    clients = tuple(args.client)
+    if not clients:
+        # With app registration enabled, the shared TOML entry also configures the Codex CLI.
+        register_agents(command, AGENTS if args.no_apps else ("claude", "gemini"))
     if command[0] == "uv" and not shutil.which("uv"):
         print("  경고: PATH에서 'uv'를 찾지 못했습니다. 등록한 실행 명령이 uv를 쓰므로 uv를 설치하거나 PATH에 추가하세요.")
+    apps_ok = True
     if args.no_apps:
         print("\n[4/4] 앱 설정 파일: 건너뜀 (--no-apps)")
     else:
-        register_app_configs(installer, command)
-    print_manual_registration(command)
+        apps_ok = register_app_configs(installer, command, clients)
+    if not clients:
+        print_manual_registration(command)
     report_legacy_registrations()
 
     print("\n" + "=" * 60)
-    if package_ok:
-        print("  설치를 마쳤습니다. 3ds Max를 다시 시작하면 애플리케이션 패키지가 로드됩니다.")
-    else:
+    if package_ok and apps_ok:
+        print("  Installation complete. Reload the client and check pyjal3dsmcp in a new local session.")
+        if not running:
+            print("  Start 3ds Max to load the bridge.")
+    elif not package_ok:
         print("  애플리케이션 패키지 설치에 실패했습니다. 위 메시지를 확인하고 3ds Max를 닫은 뒤 다시 실행하세요.")
+    else:
+        print("  Client registration failed. Check the configuration path and error above, then retry.")
     print(f"  MCP 서버는 AI 클라이언트가 연결할 때 시작됩니다 (등록 이름: {SERVER_NAME}, Tool 프로필: full 고정).")
     print(f"  서버 실행 명령: {subprocess.list2cmdline(command)}")
     print("=" * 60)
-    return 0 if package_ok else 1
+    return 0 if package_ok and apps_ok else 1
 
 
 def main() -> int:
@@ -608,6 +644,8 @@ def update_main() -> int:
 
     flags = [flag for flag, on in (("--editable", args.editable), ("--skip-skill", args.skip_skill),
                                    ("--no-apps", args.no_apps)) if on]
+    for client in args.client:
+        flags.extend(["--client", client])
     # 받은 코드와 의존성으로 설치하도록 새 프로세스에서 실행한다(이 프로세스는 받기 전 코드다).
     # --no-project: 프로젝트 모드의 uv run은 pull로 버전이 바뀐 checkout의 .venv를 다시 동기화하는데, 지금 실행 중인
     # .venv\Scripts\pyjal3dsmcp-update.exe가 잠겨 있어 교체하지 못할 수 있다(Windows).
@@ -733,6 +771,7 @@ def _remove_app_entries(apps: list[client_configs.AppConfig]) -> bool:
         elif outcome.status in (client_configs.ABSENT, client_configs.MISSING):
             print(f"  없음: {app.label} 항목 ({app.path})")
         elif outcome.status == client_configs.UNREADABLE:
+            ok = False
             print(f"  건너뜀: {app.label} - 읽을 수 없어 바꾸지 않았습니다 ({outcome.message})")
             print(f'    {app.path} 에서 "{app.servers_key}"의 "{SERVER_NAME}" 항목을 직접 지우세요.')
         else:
@@ -805,7 +844,8 @@ def uninstall_main() -> int:
     _prepare_console()
 
     installer = upstream.load_installer()
-    agents = [agent for agent in AGENTS if shutil.which(agent)]
+    # The app cleanup removes the shared Codex/ChatGPT entry even without the CLI.
+    agents = [agent for agent in ("claude", "gemini") if shutil.which(agent)]
     apps = [app for app in app_configs(installer) if app.path.is_file()]
     package = Path(installer.APPLICATION_PACKAGE_DST)
     skills = _skill_dirs()
