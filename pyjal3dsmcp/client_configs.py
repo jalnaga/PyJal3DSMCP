@@ -131,7 +131,13 @@ def _write(app: AppConfig, original: bytes | None, data: dict[str, Any]) -> None
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(content)
-        os.replace(temporary, app.path)
+        current = app.path.read_bytes() if app.path.exists() else None
+        if current != original:
+            raise OSError("설정 파일이 변경되었습니다.")
+        if original is None:
+            os.link(temporary, app.path)
+        else:
+            os.replace(temporary, app.path)
     finally:
         Path(temporary).unlink(missing_ok=True)
 

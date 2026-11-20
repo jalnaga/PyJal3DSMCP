@@ -21,6 +21,7 @@ Python 수준 ``LibraryRegistry.refresh``의 trust 유지 계약은 바꾸지 �
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -113,6 +114,7 @@ class TeamConfig:
 
     configured: bool = False
     profile_path: str | None = None
+    profile_sha256: str | None = None
     trust_roots: tuple[TrustRoot, ...] = ()
     libraries: tuple[LibrarySpec, ...] = ()
     disabled_libraries: frozenset[str] = frozenset()
@@ -233,6 +235,7 @@ def _resolve_item_path(text: Any, base: Path, anchor: str, what: str, warnings: 
 
 @dataclass
 class _Profile:
+    sha256: str
     anchor: str
     trust_roots: tuple[TrustRoot, ...]
     libraries: list[LibrarySpec]
@@ -256,13 +259,14 @@ def _load_preconditions(items: Any) -> dict[str, Precondition]:
     return result
 
 
-def _load_profile(path: Path, warnings: list[dict[str, Any]]) -> _Profile | None:
+def _load_profile(path: Path, warnings: list[dict[str, Any]], raw: bytes | None = None) -> _Profile | None:
     """프로필을 읽어 신뢰 루트·라이브러리·사전 조건을 돌려준다. 프로필 전체가 쓸 수 없으면 경고를 남기고 None."""
-    if not path.is_file():
+    if raw is None and not path.is_file():
         warnings.append(_warning(TEAM_PROFILE_NOT_FOUND, f"팀 프로필 파일이 없습니다: {path}", profile=str(path)))
         return None
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes() if raw is None else raw
+        data = tomllib.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         warnings.append(_warning(TEAM_PROFILE_INVALID, f"팀 프로필을 TOML로 읽지 못했습니다: {path}: {exc}", profile=str(path)))
         return None
@@ -315,7 +319,7 @@ def _load_profile(path: Path, warnings: list[dict[str, Any]]) -> _Profile | None
         )
         if resolved is not None:
             libraries.append(LibrarySpec(resolved, library_id, item.get("entrypoints"), _ORIGIN_PROFILE))
-    return _Profile(anchor, tuple(roots), libraries, _load_preconditions(data.get("preconditions")))
+    return _Profile(hashlib.sha256(raw).hexdigest(), anchor, tuple(roots), libraries, _load_preconditions(data.get("preconditions")))
 
 
 def load_team_config(environ: dict[str, str] | None = None, settings_path: Path | None = None) -> TeamConfig:
@@ -343,6 +347,7 @@ def load_team_config(environ: dict[str, str] | None = None, settings_path: Path 
         config.profile_path = str(profile_path)
         loaded = _load_profile(profile_path, warnings)
         if loaded is not None:
+            config.profile_sha256 = loaded.sha256
             config.trust_roots, profile_libraries = loaded.trust_roots, loaded.libraries
             config.anchor, config.preconditions = loaded.anchor, loaded.preconditions
     config.libraries = tuple(profile_libraries + personal)

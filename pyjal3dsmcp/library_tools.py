@@ -296,6 +296,7 @@ def library_attach(expected_pid: int) -> dict[str, Any]:
     warnings = state.copy_warnings() + team_profile.trust_root_warnings(state.config)
     warnings += [warning for warning in discovered_warnings if warning not in warnings]
     warnings += result.get("warnings", [])  # LOADED_CODE_UNVERIFIED(항목마다 하나)
+    result["team_profile"] = {"path": state.config.profile_path, "sha256": state.config.profile_sha256}
     result["auto_registered"] = registered
     result["warnings"] = warnings
     return result

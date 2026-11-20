@@ -58,3 +58,7 @@
 외부에서 로드된 코드의 파일이 Max 시작 뒤 변경됐거나 읽히지 않는다는 사실은 옛 코드가 로드됐다는 확증이 아닙니다. DLEL이 기억한 로드 revision과 Catalog revision이 다를 때만 재시작을 필수로 요구합니다. 실패한 요청은 bridge 오류를 보존하며 자동 재시도하지 않습니다.
 
 이 가이드는 `resource://pyjal3dsmcp/agent-guide`로 읽을 수 있습니다. 각 도구의 docstring에서 정확한 인자와 오류 계약을 확인하세요.
+
+## Installation and profile verification
+
+Follow the project README for installation and removal. After changing the PC pointer or publishing a profile, restart the MCP server. Check the selected Max instance with `query_scene(action="overview")`, then compare `library_attach(expected_pid=PID).team_profile` with the path and SHA-256 from `pyjal3dsmcp-team show --json`. Review trust roots and warnings before using a library.

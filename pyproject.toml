@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyjal3dsmcp"
-version = "2.1.0"
+version = "2.2.0"
 description = "PyJal3DSMCP: Upstream 3dsmax-mcp MCP server plus DLEL library tools for registered Python libraries"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "tomlkit>=0.13,<1",
+    "tomlkit>=0.13",
     "3dsmax-mcp @ git+https://github.com/cl0nazepamm/3dsmax-mcp@82f555275c4d030e0125898526c9a93e19532a1e",
 ]
 
@@ -28,10 +28,14 @@ Repository = "https://github.com/jalnaga/PyJal3DSMCP"
 Upstream = "https://github.com/cl0nazepamm/3dsmax-mcp"
 
 [project.scripts]
+pyjal3dsmcp-team = "pyjal3dsmcp.team_cli:main"
 pyjal3dsmcp = "pyjal3dsmcp.server:main"
 pyjal3dsmcp-install = "pyjal3dsmcp.installer:main"
 pyjal3dsmcp-update = "pyjal3dsmcp.installer:update_main"
 pyjal3dsmcp-uninstall = "pyjal3dsmcp.installer:uninstall_main"
+
+[tool.hatch.build.hooks.custom]
+path = "pyjal3dsmcp/build_hook.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -40,7 +44,8 @@ allow-direct-references = true
 packages = ["pyjal3dsmcp", "pyjal_extensions"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"docs/pyjal/examples/pyjal3dsmcp-team.example.toml" = "pyjal3dsmcp/docs/pyjal3dsmcp-team.example.toml"
 "docs/pyjal/DLEL-AGENT-GUIDE.md" = "pyjal3dsmcp/docs/DLEL-AGENT-GUIDE.md"
 
 [tool.hatch.build.targets.sdist]
-only-include = ["pyjal3dsmcp", "pyjal_extensions", "docs/pyjal/DLEL-AGENT-GUIDE.md", "README.md", "README.ko.md", "LICENSE"]
+only-include = ["docs/pyjal/examples/pyjal3dsmcp-team.example.toml", "pyjal3dsmcp", "pyjal_extensions", "docs/pyjal/DLEL-AGENT-GUIDE.md", "README.md", "LICENSE"]

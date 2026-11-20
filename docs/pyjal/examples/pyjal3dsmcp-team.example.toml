@@ -1,0 +1,3 @@
+# Relative paths in this profile resolve from its directory.
+schema_version = 1
+anchor = "."
