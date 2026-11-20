@@ -2,7 +2,7 @@
 
 [English README](README.md)
 
-Windows 작업용 PC에서 Claude Desktop, Codex 또는 ChatGPT 데스크톱을 Autodesk 3ds Max에 연결합니다. 아티스트는 대화로 장면을 살펴보고, 이름으로 오브젝트를 찾거나, 재질과 모디파이어를 다룰 수 있습니다. [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp)의 장면 도구에 로컬 Python 라이브러리를 찾아 Max 안에서 실행하는 도구 11개를 추가했습니다.
+Windows 작업용 PC에서 Claude Desktop, Codex 또는 ChatGPT 데스크톱을 Autodesk 3ds Max에 연결합니다. 아티스트는 대화로 장면을 살펴보고, 이름으로 오브젝트를 찾거나, 재질과 모디파이어를 다룰 수 있습니다. [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp)의 장면 도구에 로컬 Python 라이브러리를 찾아 Max 안에서 실행하는 도구 12개를 추가했습니다.
 
 ## 에이전트에게 설치 요청하기
 
@@ -74,6 +74,8 @@ pyjal3dsmcp-team edit --file $file --personal-file trust-root add sample --path 
 ~~~
 
 신뢰 루트 변경은 하위 라이브러리의 import와 실행 권한에 영향을 줍니다. diff를 확인한 뒤 같은 편집 명령에 `--apply --expect-sha256 <계획 해시>`를 추가합니다. 팀 원본이면 `--personal-file` 대신 `--work-copy <사본 경로>`로 동일한 상대 트리의 작업 사본을 지정합니다. 팀 배포 담당자가 사본을 검토해 게시합니다. MCP 서버 재시작 뒤 `query_scene(action="overview")`로 연결을 확인하고 `library_attach(expected_pid=PID)`의 서명을 show와 비교합니다. 로컬 포인터 해제는 `pyjal3dsmcp-team clear`입니다.
+
+첫 일반 `library_*` 호출과 매 `library_attach`는 신뢰 루트에서 발견한 표면의 ID와 실제 원본 경로가 기존 등록과 일치하면 표면 색인을 갱신합니다. 첫 성공한 attach의 `auto_migrated`에 승격된 ID가 한 번 표시됩니다. 변경 전 상태는 `library_diagnose_surfaces`로 확인할 수 있습니다. 이 진단은 Max 연결이나 카탈로그 쓰기 없이 등록 경로와 발견 경로를 비교합니다.
 
 ## 앱에서 연결 확인
 

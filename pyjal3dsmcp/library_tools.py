@@ -1,4 +1,4 @@
-"""DLEL Library의 고정 MCP Tool 11개와 에이전트 가이드 resource·안내 prompt.
+"""DLEL Library의 고정 MCP Tool 12개와 에이전트 가이드 resource·안내 prompt.
 
 ``pyjal_extensions``의 ``LibraryRegistry``(Catalog)와 ``LibraryRuntime``(인스턴스별 Binding·Runtime)을 얇게 감싸
 Upstream 서버(``upstream.load_server().mcp``)에 등록한다. 결과 envelope는 Upstream의 공통 structured wrapper가 만들고,
@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pyjal_extensions import surfaces, team_profile
+from pyjal_extensions.bindings import STORE_LOCK
 from pyjal_extensions.locations import default_catalog_dir
 from pyjal_extensions.registry import LibraryRegistry
 from pyjal_extensions.runtime import LibraryRuntime
@@ -263,6 +264,12 @@ def library_refresh(library_id: str) -> dict[str, Any]:
     return team_profile.refresh_library(LibraryRegistry(default_catalog_dir()), state.config, library_id)
 
 
+@mcp.tool(annotations={"readOnlyHint": True, "idempotentHint": True})
+def library_diagnose_surfaces() -> dict[str, Any]:
+    """Max 연결과 등록 변경 없이 신뢰 루트에서 발견한 surface의 경로와 등록 상태를 비교한다."""
+    return surfaces.diagnose_surfaces(default_catalog_dir(), team_profile.load_team_config())
+
+
 @mcp.tool(annotations={"idempotentHint": True})
 def library_attach(expected_pid: int) -> dict[str, Any]:
     """Attach to one 3ds Max instance: classify every catalog library for it and auto-enable team libraries.
@@ -271,6 +278,7 @@ def library_attach(expected_pid: int) -> dict[str, Any]:
     loaded file times, never imports anything and never changes sys.path. First re-indexes libraries under
     a team profile trust root and registers agent surfaces found there (agentapi packages and top-level
     <name>_agentapi packages; entry scripts and launchers are not indexed); new IDs are in auto_registered.
+    Promoted old registrations appear once in auto_migrated.
     Each library gets attach_state: current (loaded and confirmed up to date), not_loaded, restart_required
     (confirmed: the revision DLEL remembers loading into this Max differs from the catalog; restart Max, never
     reload), unverified (loaded by a startup script without DLEL memory and its files changed after Max
@@ -288,15 +296,19 @@ def library_attach(expected_pid: int) -> dict[str, Any]:
     runtime = _runtime()
     runtime.identify(expected_pid)  # 대상이 없으면 재색인·발견 전에 거절(전송 없음)
     state = _reindex_trusted()
-    registered, discovered_warnings = surfaces.sync_agent_surfaces(LibraryRegistry(default_catalog_dir()), state.config)
+    registered, state.surface_warnings = surfaces.sync_agent_surfaces(
+        LibraryRegistry(default_catalog_dir()), state.config, state.pending_migrations
+    )
     result = runtime.attach(expected_pid, auto_enable=state.config.is_auto_enable_target)
     source_root_of = {entry.library_id: entry.source_root for entry in LibraryRegistry(default_catalog_dir()).list_libraries()}
     for item in result["libraries"]:
         item["trust_source"] = state.config.trust_source_for(source_root_of[item["library_id"]])
     warnings = state.copy_warnings() + team_profile.trust_root_warnings(state.config)
-    warnings += [warning for warning in discovered_warnings if warning not in warnings]
     warnings += result.get("warnings", [])  # LOADED_CODE_UNVERIFIED(항목마다 하나)
     result["team_profile"] = {"path": state.config.profile_path, "sha256": state.config.profile_sha256}
+    with STORE_LOCK:
+        result["auto_migrated"] = sorted(state.pending_migrations)
+        state.pending_migrations.clear()
     result["auto_registered"] = registered
     result["warnings"] = warnings
     return result

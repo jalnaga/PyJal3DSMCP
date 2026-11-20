@@ -1,6 +1,6 @@
 """PyJal3DSMCP MCP 서버 진입점(console script ``pyjal3dsmcp``, ``python -m pyjal3dsmcp.server``).
 
-Upstream ``3dsmax-mcp`` 서버를 그대로 쓰고 그 위에 ``library_*`` Tool 11개·에이전트 가이드 resource·안내 prompt만 더한다.
+Upstream ``3dsmax-mcp`` 서버를 그대로 쓰고 그 위에 ``library_*`` Tool 12개·에이전트 가이드 resource·안내 prompt만 더한다.
 Upstream Tool·prompt·resource는 수정하지 않는다.
 
 프로필은 항상 ``full``이다. 환경 변수(``MCP_TOOL_PROFILE``·``THREEDSMAX_MCP_TOOL_PROFILE``)나 사용자 INI의

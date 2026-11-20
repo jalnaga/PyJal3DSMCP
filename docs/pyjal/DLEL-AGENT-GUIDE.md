@@ -11,10 +11,13 @@
 
 `library_attach`, `library_scan`, `library_probe`, `library_execute`는 Python bridge를 사용하므로 `safe_mode=false`가 필요합니다. 설정은 사용자에게 확인하며 자동으로 바꾸지 않습니다. PID와 프로세스 시작 시각을 함께 확인하므로 Max를 다시 시작하면 새 인스턴스로 취급합니다.
 
+첫 일반 `library_*` 호출과 매 `library_attach`는 신뢰 루트에서 발견한 표면의 ID와 실제 원본 경로가 기존 등록과 일치하면 표면 색인을 갱신합니다. 첫 성공한 attach의 `auto_migrated`에 승격된 ID가 한 번 표시됩니다. 변경 전 상태는 `library_diagnose_surfaces`로 확인할 수 있습니다. 이 진단은 Max 연결이나 카탈로그 쓰기 없이 등록 경로와 발견 경로를 비교합니다.
+
 ## 도구
 
 | 도구 | 용도 |
 |---|---|
+| `library_diagnose_surfaces` | 신뢰 루트 표면과 등록 경로 비교 |
 | `library_attach` | 인스턴스 상태 분류, 프로필 항목 자동 활성화 |
 | `library_scan` | 대상 Max에서 라이브러리 후보 발견, 자동 등록 없음 |
 | `library_register` | 로컬 소스 루트 또는 설치된 패키지 폴더를 정적 분석해 등록 |

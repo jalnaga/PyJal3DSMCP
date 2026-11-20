@@ -510,9 +510,11 @@ class TeamRegistry(LibraryRegistry):
 class TeamState:
     config: TeamConfig
     warnings: list[dict[str, Any]]
+    surface_warnings: list[dict[str, Any]]
+    pending_migrations: set[str]
 
     def copy_warnings(self) -> list[dict[str, Any]]:
-        return [dict(item) for item in self.warnings]
+        return [dict(item) for item in self.warnings + self.surface_warnings]
 
 
 _STATES: dict[tuple[str, str, str], TeamState] = {}
@@ -538,8 +540,9 @@ def team_state(catalog_dir: str | os.PathLike[str]) -> TeamState:
             registry = LibraryRegistry(catalog_dir)
             warnings = list(config.warnings) + sync_team_libraries(registry, config)
             # 서버 시작(첫 library_* 호출) 때 신뢰 루트 아래 에이전트 표면을 발견해 등록한다(멱등)
-            warnings += sync_agent_surfaces(registry, config)[1]
-            state = TeamState(config, warnings)
+            migrated: set[str] = set()
+            _, surface_warnings = sync_agent_surfaces(registry, config, migrated)
+            state = TeamState(config, warnings, surface_warnings, migrated)
             _STATES[key] = state
         return state
 

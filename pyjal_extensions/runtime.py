@@ -282,22 +282,22 @@ class LibraryRuntime:
             return item
         loaded_names = [row["name"] for row in tops]
         unverified = False
+        # 확정 근거: 이 인스턴스의 로드 기억(로드 기억 또는 라이브러리 기록). DLEL은 reload하지 않으므로 기억이 곧 메모리 코드다
+        memory = set(
+            self._store.loaded_revisions(identity, checked.import_root, loaded_names, checked.surface).values()
+        )
+        if state["loaded_source_revision"] is not None:
+            memory.add(state["loaded_source_revision"])
+        if any(revision != checked.source_revision for revision in memory) or (
+            state["runtime_state"] == "restart_required"
+        ):
+            item["attach_state"] = "restart_required"
+            item["loaded_source_revision"] = self._known_loaded_revision(identity, checked, state)
+            if item["loaded_source_revision"] == checked.source_revision:
+                item["loaded_source_revision"] = None  # 디스크 내용과 메모리 코드가 같다고 볼 근거가 없다
+            self._store.update_library(identity, checked.library_id, runtime_state="restart_required")
+            return item
         if loaded_names:
-            # 확정 근거: 이 인스턴스의 로드 기억(로드 기억 또는 라이브러리 기록). DLEL은 reload하지 않으므로 기억이 곧 메모리 코드다
-            memory = set(
-                self._store.loaded_revisions(identity, checked.import_root, loaded_names, checked.surface).values()
-            )
-            if state["loaded_source_revision"] is not None:
-                memory.add(state["loaded_source_revision"])
-            if any(revision != checked.source_revision for revision in memory) or (
-                state["runtime_state"] == "restart_required"
-            ):
-                item["attach_state"] = "restart_required"
-                item["loaded_source_revision"] = self._known_loaded_revision(identity, checked, state)
-                if item["loaded_source_revision"] == checked.source_revision:
-                    item["loaded_source_revision"] = None  # 디스크 내용과 메모리 코드가 같다고 볼 근거가 없다
-                self._store.update_library(identity, checked.library_id, runtime_state="restart_required")
-                return item
             # 기억이 없으면 수정 시각은 추정 근거일 뿐이다("로드 뒤 수정"과 "수정 뒤 첫 로드"를 구분할 수 없고, 네트워크
             # 공유는 파일 서버 시계로 기록된다). 차단하지 않고 기준값도 기록하지 않는다
             unverified = not memory and _changed_after_start(loaded, checked.top_level, identity.process_start_time_utc)

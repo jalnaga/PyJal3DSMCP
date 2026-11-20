@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,29 @@ class LibraryRegistry:
         self._check_new_id(library_id, catalog)
         scan = scan_surface(surface_dir, module)
         return self._register_scan(library_id, scan, [], catalog, surface=module)
+
+    def migrate_surface(self, surface_dir: str, module: str, library_id: str) -> LibraryCatalogEntry:
+        """기존 등록의 승인과 부가 자료를 보존하며 표면 색인을 교체한다."""
+        catalog = self._load_catalog()
+        previous = self._entry(catalog, library_id)
+        if os.path.normcase(os.path.realpath(previous.source_root)) != os.path.normcase(os.path.realpath(surface_dir)):
+            raise LibraryError("AGENT_SURFACE_CONFLICT", "등록된 원본 경로가 달라졌습니다.")
+        scan = scan_surface(surface_dir, module)
+        entry, index = self._index(library_id, scan, previous.entrypoints, trust=previous.trust,
+                                   strict=False, surface=module)
+        directory = self._library_dir(library_id)
+        with tempfile.TemporaryDirectory(dir=self._root) as temporary:
+            backup = Path(temporary) / "previous"
+            shutil.copytree(directory, backup)
+            try:
+                self._write_library(entry, index)
+                catalog[library_id] = entry.to_dict()
+                self._save_catalog(catalog)
+            except Exception:
+                shutil.rmtree(directory)
+                backup.rename(directory)
+                raise
+        return entry
 
     def _register_scan(
         self,

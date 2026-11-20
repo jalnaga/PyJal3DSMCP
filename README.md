@@ -2,7 +2,7 @@
 
 [한국어 README](README.ko.md)
 
-Connect Claude Desktop, Codex, or ChatGPT Desktop to Autodesk 3ds Max on your Windows workstation. Ask your assistant to inspect a scene, find objects by name, or work with materials and modifiers. PyJal3DSMCP includes the tools from [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp) and adds 11 tools for discovering and running your own Python libraries inside Max.
+Connect Claude Desktop, Codex, or ChatGPT Desktop to Autodesk 3ds Max on your Windows workstation. Ask your assistant to inspect a scene, find objects by name, or work with materials and modifiers. PyJal3DSMCP includes the tools from [3dsmax-mcp](https://github.com/cl0nazepamm/3dsmax-mcp) and adds 12 tools for discovering and running your own Python libraries inside Max.
 
 ## Ask an agent to install it
 
@@ -74,6 +74,8 @@ pyjal3dsmcp-team edit --file $file --personal-file trust-root add sample --path 
 ~~~
 
 Trust-root changes grant permission to import and execute libraries beneath the root. Review the diff, then append `--apply --expect-sha256 <plan hash>` to the same edit command. For a team profile replace `--personal-file` with `--work-copy <path>` and use a copy with the same relative directory structure. The team maintainer reviews and publishes that copy. After a change, restart the MCP server, run `query_scene(action="overview")` and compare `library_attach(expected_pid=PID)` with the signature from `show`. To disconnect only the saved PC pointer, run `pyjal3dsmcp-team clear`.
+
+The first ordinary `library_*` call and each `library_attach` promote old registrations whose ID and resolved source path match a discovered trusted surface. The next successful attach reports their IDs once in `auto_migrated`. Before migration, use `library_diagnose_surfaces` to compare registered and discovered paths without writing the catalog or connecting to Max.
 
 ## Verify from your app
 

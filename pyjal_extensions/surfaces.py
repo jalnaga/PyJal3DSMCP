@@ -10,7 +10,7 @@
 프로필 anchor 안일 때만 따라가며(같은 실제 디렉터리는 한 번만) 시간·디렉터리 수 상한을 넘으면 그 루트의 탐색을 멈추고 경고한다.
 
 표면 항목의 ``library_id``는 표면 모듈 점 경로의 소문자다(ID 규칙에 맞지 않으면 등록하지 않음). 같은 ID가 같은 표면
-디렉터리로 이미 있으면 그대로 쓰고, 다른 원본이면 덮어쓰지 않고 ``AGENT_SURFACE_CONFLICT`` 경고를 낸다.
+디렉터리로 이미 있으면 표면 등록을 갱신하고, 다른 원본이면 덮어쓰지 않고 ``AGENT_SURFACE_CONFLICT`` 경고를 낸다.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from typing import Any
 
 from pyjal_extensions import LibraryError
 from pyjal_extensions.bindings import STORE_LOCK
-from pyjal_extensions.registry import LibraryRegistry
+from pyjal_extensions.registry import LibraryCatalogEntry, LibraryRegistry
 from pyjal_extensions.team_profile import TeamConfig, TrustRoot
 
 SURFACE_PACKAGE_NAME = "agentapi"
@@ -96,7 +96,7 @@ def find_agent_surfaces(config: TeamConfig) -> tuple[list[AgentSurface], list[di
             warnings.append(warning)
         for surface in found:
             key = _real(surface.surface_dir)
-            if key not in seen:
+            if key not in seen and config.trust_root_for(surface.surface_dir) is not None:
                 seen.add(key)
                 surfaces.append(surface)
     return surfaces, warnings
@@ -163,10 +163,47 @@ def _walk_root(root: TrustRoot, anchor: str | None) -> tuple[list[AgentSurface],
     return found, None
 
 
-def sync_agent_surfaces(registry: LibraryRegistry, config: TeamConfig) -> tuple[list[str], list[dict[str, Any]]]:
+def _has_manual_approval(entry: LibraryCatalogEntry) -> bool:
+    """팀 루트의 상속 승인을 적용하기 전 카탈로그 항목에서 수동 승인을 확인한다."""
+    return bool(entry.trust.get("approved_for_import") or entry.trust.get("approved_for_execution"))
+
+
+def diagnose_surfaces(catalog_dir: Path, config: TeamConfig) -> dict[str, Any]:
+    """카탈로그 생성·등록 없이 발견 경로와 등록 경로를 비교한다."""
+    found, warnings = find_agent_surfaces(config)
+    with STORE_LOCK:
+        entries = LibraryRegistry(catalog_dir).list_libraries() if catalog_dir.is_dir() else []
+    catalog = {entry.library_id: entry for entry in entries}
+    rows = []
+    for surface in found:
+        entry = catalog.get(surface.library_id)
+        row = {
+            "library_id": surface.library_id,
+            "surface_dir": surface.surface_dir,
+            "source_root": entry.source_root if entry else None,
+            "status": "missing",
+        }
+        if entry:
+            if _real(entry.source_root) != _real(surface.surface_dir):
+                row.update(status="conflict", code=AGENT_SURFACE_CONFLICT)
+            else:
+                row["status"] = "ok" if entry.surface == surface.module else "old_registration"
+                if row["status"] == "old_registration" and _has_manual_approval(entry):
+                    row["reason"] = "explicit"
+        rows.append(row)
+    excluded = [{"library_id": e.library_id, "source_root": e.source_root, "reason": "explicit"}
+                for e in entries if config.trust_root_for(e.source_root) is None]
+    return {"surfaces": rows, "excluded": excluded, "warnings": list(config.warnings) + warnings}
+
+
+def sync_agent_surfaces(
+    registry: LibraryRegistry, config: TeamConfig, migrated: set[str] | None = None
+) -> tuple[list[str], list[dict[str, Any]]]:
     """발견한 표면 중 Catalog에 없는 것을 등록한다(정적 분석만, 멱등). (이번에 새로 등록한 ID, 경고)."""
     if not config.trust_roots:
         return [], []
+    if migrated is None:
+        migrated = set()
     surfaces, warnings = find_agent_surfaces(config)
     registered: list[str] = []
     with STORE_LOCK:
@@ -190,9 +227,12 @@ def sync_agent_surfaces(registry: LibraryRegistry, config: TeamConfig) -> tuple[
                         "source_root": existing.source_root,
                         "surface_dir": surface.surface_dir,
                     })
-                continue
+                    continue
+                if existing.surface == surface.module or _has_manual_approval(existing):
+                    continue
             try:
-                catalog[surface.library_id] = registry.register_surface(
+                write = registry.migrate_surface if existing else registry.register_surface
+                catalog[surface.library_id] = write(
                     surface.surface_dir, surface.module, library_id=surface.library_id
                 )
             except (LibraryError, OSError) as exc:
@@ -201,10 +241,13 @@ def sync_agent_surfaces(registry: LibraryRegistry, config: TeamConfig) -> tuple[
                     "message": f"에이전트 표면 등록에 실패했습니다: {surface.surface_dir}: {exc}",
                     "library_id": surface.library_id,
                     "surface_dir": surface.surface_dir,
-                    **({"error_code": exc.code} if isinstance(exc, LibraryError) else {}),
+                    "error_code": exc.code if isinstance(exc, LibraryError) else AGENT_SURFACE_FAILED,
                 })
                 continue
-            registered.append(surface.library_id)
+            if existing:
+                migrated.add(surface.library_id)
+            else:
+                registered.append(surface.library_id)
     return registered, warnings
 
 
@@ -214,6 +257,7 @@ __all__ = [
     "AGENT_SURFACE_SCAN_LIMIT",
     "SURFACE_DEPTH_LIMIT",
     "AgentSurface",
+    "diagnose_surfaces",
     "find_agent_surfaces",
     "surface_module",
     "sync_agent_surfaces",
