@@ -20,7 +20,7 @@ classifiers = [
 
 dependencies = [
     "tomlkit>=0.13",
-    "3dsmax-mcp @ git+https://github.com/cl0nazepamm/3dsmax-mcp@82f555275c4d030e0125898526c9a93e19532a1e",
+    "3dsmax-mcp @ git+https://github.com/cl0nazepamm/3dsmax-mcp@a861e620099a69b2a30270ec2305335094144400",
 ]
 
 [project.urls]

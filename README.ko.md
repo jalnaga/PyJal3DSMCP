@@ -99,4 +99,4 @@ Max를 시작하고 클라이언트를 다시 불러온 뒤 새 대화를 엽니
 
 ## 라이선스
 
-[MIT 라이선스](https://github.com/jalnaga/PyJal3DSMCP/blob/master/LICENSE). 원본 3dsmax-mcp에는 [해당 프로젝트의 라이선스](https://github.com/cl0nazepamm/3dsmax-mcp/blob/82f555275c4d030e0125898526c9a93e19532a1e/LICENSE)가 적용됩니다.
+[MIT 라이선스](https://github.com/jalnaga/PyJal3DSMCP/blob/master/LICENSE). 원본 3dsmax-mcp에는 [해당 프로젝트의 라이선스](https://github.com/cl0nazepamm/3dsmax-mcp/blob/a861e620099a69b2a30270ec2305335094144400/LICENSE)가 적용됩니다.

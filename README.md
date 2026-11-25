@@ -99,4 +99,4 @@ Teams can put `pyjal3dsmcp-team.toml` in the installer's working directory to re
 
 ## License
 
-[MIT License](https://github.com/jalnaga/PyJal3DSMCP/blob/master/LICENSE). The upstream dependency is distributed under its [own license](https://github.com/cl0nazepamm/3dsmax-mcp/blob/82f555275c4d030e0125898526c9a93e19532a1e/LICENSE).
+[MIT License](https://github.com/jalnaga/PyJal3DSMCP/blob/master/LICENSE). The upstream dependency is distributed under its [own license](https://github.com/cl0nazepamm/3dsmax-mcp/blob/a861e620099a69b2a30270ec2305335094144400/LICENSE).
